@@ -37,8 +37,7 @@ def handle_message(update: Update, context: CallbackContext):
         return
     else:
         if update.message:
-            message = f"سفارش جدید از کاربر @{update.message.from_user.username}:
-{text}"
+            message = f"سفارش جدید از کاربر @{update.message.from_user.username}:{text}"
             context.bot.send_message(chat_id=ADMIN_EMAIL, text=message)
             update.message.reply_text("✅ سفارش شما با موفقیت ثبت شد. به‌زودی با شما تماس خواهیم گرفت.")
 
