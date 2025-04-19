@@ -44,7 +44,7 @@ async def send_products(query, context):
         name = product['name']
         price = product['price']
         image = product['images'][0]['src'] if product['images'] else ""
-        caption = f"*{name}*
+        caption = f"*{name}*"
 قیمت: {price} تومان
 برای سفارش، پیام دهید."
         await context.bot.send_photo(chat_id=query.message.chat.id, photo=image, caption=caption, parse_mode="Markdown")
