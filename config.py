@@ -1,0 +1,7 @@
+TELEGRAM_TOKEN = "7922260637:AAEtLE-bBM4mJSkYWkG89ggxBBR2dxYQRqA"
+WC_API_URL = "https://www.jamakshop.ir/wp-json/wc/v3/products"
+WC_CONSUMER_KEY = "ck_48630eb2196cb3a83f5ad5e3dc82c1c15d911068"
+WC_CONSUMER_SECRET = "cs_dc09790cafab09f23ad3a2ab79032b7c87abd3b1"
+EMAIL_ADDRESS = "sif3940@gmail.com"
+EMAIL_PASSWORD = "zyzi jtox swdm yplq"
+SUPPORT_USERNAME = "sif39"
