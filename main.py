@@ -1,68 +1,93 @@
 import logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, MessageHandler, Filters
 import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
-import smtplib
-# -*- coding: utf-8 -*-
-from email.mime.text import MIMEText
-from config import TELEGRAM_TOKEN, WC_API_URL, WC_CONSUMER_KEY, WC_CONSUMER_SECRET, EMAIL_ADDRESS, EMAIL_PASSWORD, SUPPORT_USERNAME
+from config import WC_API_URL, CONSUMER_KEY, CONSUMER_SECRET, BOT_TOKEN, SUPPORT_LINK, ADMIN_EMAIL
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+user_subscribers = set()
+
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text(
+        "به ژامک‌بات خوش آمدید 🌸\n"
+        "لطفاً یکی از گزینه‌ها را انتخاب کنید:",
+        reply_markup=main_menu()
+    )
+
+def main_menu():
     keyboard = [
-        [InlineKeyboardButton("🛍️ مشاهده محصولات", callback_data="products")],
-        [InlineKeyboardButton("📩 عضویت در خبرنامه", callback_data="subscribe")],
-        [InlineKeyboardButton("🆘 پشتیبانی", url=f"https://t.me/{SUPPORT_USERNAME}")]
+        [KeyboardButton("🛍 دسته‌بندی محصولات")],
+        [KeyboardButton("📝 ثبت سفارش")],
+        [KeyboardButton("📩 عضویت در خبرنامه")]
     ]
-    await update.message.reply_text("به ژامک‌بات خوش آمدید! یکی از گزینه‌ها را انتخاب کنید:", reply_markup=InlineKeyboardMarkup(keyboard))
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-async def handle_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    if query.data == "products":
-        await send_products(query, context)
-    elif query.data == "subscribe":
-        await query.edit_message_text("لطفاً ایمیل خود را ارسال کنید تا در خبرنامه عضو شوید.")
-        context.user_data["subscribe_mode"] = True
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get("subscribe_mode"):
-        email = update.message.text
-        context.user_data["subscribe_mode"] = False
-        await update.message.reply_text(f"ایمیل شما ({email}) در خبرنامه ثبت شد. ✅")
-        # ایمیل به مدیر سایت
-        send_email("عضویت در خبرنامه", f"ایمیل جدید: {email}")
+def handle_message(update: Update, context: CallbackContext):
+    text = update.message.text
+    if text == "🛍 دسته‌بندی محصولات":
+        send_categories(update, context)
+    elif text == "📩 عضویت در خبرنامه":
+        user_id = update.message.chat_id
+        user_subscribers.add(user_id)
+        update.message.reply_text("✅ شما با موفقیت در خبرنامه عضو شدید.")
+    elif text == "📝 ثبت سفارش":
+        update.message.reply_text("لطفاً سفارش خود را به صورت دقیق وارد کنید تا بررسی شود:")
+        return
     else:
-        await update.message.reply_text("برای شروع /start را بزنید.")
+        if update.message:
+            message = f"سفارش جدید از کاربر @{update.message.from_user.username}:
+{text}"
+            context.bot.send_message(chat_id=ADMIN_EMAIL, text=message)
+            update.message.reply_text("✅ سفارش شما با موفقیت ثبت شد. به‌زودی با شما تماس خواهیم گرفت.")
 
-async def send_products(query, context):
-    response = requests.get(WC_API_URL, auth=(WC_CONSUMER_KEY, WC_CONSUMER_SECRET))
+def send_categories(update: Update, context: CallbackContext):
+    response = requests.get(f"{WC_API_URL}/products/categories", auth=(CONSUMER_KEY, CONSUMER_SECRET))
+    categories = response.json()
+    keyboard = []
+    for cat in categories:
+        if cat['count'] > 0:
+            keyboard.append([InlineKeyboardButton(cat['name'], callback_data=f"cat_{cat['id']}")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text("دسته‌بندی‌ها:", reply_markup=reply_markup)
+
+def category_selected(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+    cat_id = query.data.split("_")[1]
+    response = requests.get(f"{WC_API_URL}/products", params={
+        "category": cat_id,
+        "stock_status": "instock",
+        "per_page": 10
+    }, auth=(CONSUMER_KEY, CONSUMER_SECRET))
     products = response.json()
 
-    for product in products[:5]:
+    if not products:
+        query.edit_message_text("متاسفانه محصولی در این دسته موجود نیست ❌")
+        return
+
+    for product in products:
         name = product['name']
         price = product['price']
-        image = product['images'][0]['src'] if product['images'] else ""
-        caption = f"""*{name}*
-قیمت: {price} تومان
-برای سفارش، پیام دهید."""
-        await context.bot.send_photo(chat_id=query.message.chat.id, photo=image, caption=caption, parse_mode="Markdown")
+        image_url = product['images'][0]['src'] if product['images'] else None
 
-def send_email(subject, body):
-    msg = MIMEText(body)
-    msg['Subject'] = subject
-    msg['From'] = EMAIL_ADDRESS
-    msg['To'] = EMAIL_ADDRESS
+        caption = f"*{name}*\nقیمت: {price} تومان\nبرای سفارش، پیام دهید."
+        keyboard = [[InlineKeyboardButton("📞 پشتیبانی", url=SUPPORT_LINK)]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
 
-    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-        smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-        smtp.send_message(msg)
+        context.bot.send_photo(chat_id=query.message.chat.id, photo=image_url, caption=caption, parse_mode='Markdown', reply_markup=reply_markup)
 
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(handle_query))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.run_polling()
+def main():
+    updater = Updater(BOT_TOKEN)
+    dp = updater.dispatcher
+
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CallbackQueryHandler(category_selected, pattern=r"^cat_"))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == '__main__':
+    main()
