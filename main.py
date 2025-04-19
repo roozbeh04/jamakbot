@@ -3,6 +3,7 @@ import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
 import smtplib
+# -*- coding: utf-8 -*-
 from email.mime.text import MIMEText
 from config import TELEGRAM_TOKEN, WC_API_URL, WC_CONSUMER_KEY, WC_CONSUMER_SECRET, EMAIL_ADDRESS, EMAIL_PASSWORD, SUPPORT_USERNAME
 
@@ -44,9 +45,8 @@ async def send_products(query, context):
         name = product['name']
         price = product['price']
         image = product['images'][0]['src'] if product['images'] else ""
-        caption = f"*{name}*"
+        caption = f"*{name}*\nبرای سفارش، پیام دهید."
 قیمت: {price} تومان
-برای سفارش، پیام دهید."
         await context.bot.send_photo(chat_id=query.message.chat.id, photo=image, caption=caption, parse_mode="Markdown")
 
 def send_email(subject, body):
