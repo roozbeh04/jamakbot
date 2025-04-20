@@ -47,8 +47,7 @@ def handle_message(message):
 # ------------------ ذخیره شماره ------------------
 def save_number(message):
     with open("newsletter.txt", "a") as f:
-        f.write(f"{message.chat.id}: {message.text}
-")
+        f.write(f"{message.chat.id}: {message.text}")
     bot.send_message(message.chat.id, "شماره شما ذخیره شد. از عضویت در خبرنامه سپاسگزاریم!")
 
 # ------------------ کال‌بک دسته‌بندی ------------------
