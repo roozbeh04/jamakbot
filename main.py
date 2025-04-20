@@ -1,92 +1,74 @@
-import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, MessageHandler, Filters
+import telebot
 import requests
-from config import WC_API_URL, CONSUMER_KEY, CONSUMER_SECRET, BOT_TOKEN, SUPPORT_LINK, ADMIN_EMAIL
+from config import *
+from telebot import types
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
+bot = telebot.TeleBot(BOT_TOKEN)
 
-user_subscribers = set()
+# ------------------ دسته‌بندی‌ها ------------------
+def get_categories():
+    url = f"{WC_URL}/products/categories"
+    response = requests.get(url, auth=(WC_KEY, WC_SECRET))
+    return response.json()
 
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text(
-        "به ژامک‌بات خوش آمدید 🌸\n"
-        "لطفاً یکی از گزینه‌ها را انتخاب کنید:",
-        reply_markup=main_menu()
-    )
+# ------------------ محصولات موجود ------------------
+def get_products_by_category(cat_id):
+    url = f"{WC_URL}/products?category={cat_id}&stock_status=instock"
+    response = requests.get(url, auth=(WC_KEY, WC_SECRET))
+    return response.json()
 
-def main_menu():
-    keyboard = [
-        [KeyboardButton("🛍 دسته‌بندی محصولات")],
-        [KeyboardButton("📝 ثبت سفارش")],
-        [KeyboardButton("📩 عضویت در خبرنامه")]
-    ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+# ------------------ استارت ------------------
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.row('🛍 دسته‌بندی محصولات')
+    markup.row('📝 عضویت در خبرنامه', '📞 پشتیبانی')
+    bot.send_message(message.chat.id, "به ژامک‌شاپ خوش آمدید ✨
+یکی از گزینه‌ها را انتخاب کنید:", reply_markup=markup)
 
-def handle_message(update: Update, context: CallbackContext):
-    text = update.message.text
-    if text == "🛍 دسته‌بندی محصولات":
-        send_categories(update, context)
-    elif text == "📩 عضویت در خبرنامه":
-        user_id = update.message.chat_id
-        user_subscribers.add(user_id)
-        update.message.reply_text("✅ شما با موفقیت در خبرنامه عضو شدید.")
-    elif text == "📝 ثبت سفارش":
-        update.message.reply_text("لطفاً سفارش خود را به صورت دقیق وارد کنید تا بررسی شود:")
-        return
-    else:
-        if update.message:
-            message = f"سفارش جدید از کاربر @{update.message.from_user.username}:{text}"
-            context.bot.send_message(chat_id=ADMIN_EMAIL, text=message)
-            update.message.reply_text("✅ سفارش شما با موفقیت ثبت شد. به‌زودی با شما تماس خواهیم گرفت.")
+# ------------------ هندل پیام ------------------
+@bot.message_handler(func=lambda m: True)
+def handle_message(message):
+    if message.text == '🛍 دسته‌بندی محصولات':
+        categories = get_categories()
+        markup = types.InlineKeyboardMarkup()
+        for cat in categories:
+            if cat['count'] > 0:
+                markup.add(types.InlineKeyboardButton(cat['name'], callback_data=f"cat_{cat['id']}"))
+        bot.send_message(message.chat.id, "لطفاً یک دسته را انتخاب کنید:", reply_markup=markup)
+    elif message.text == '📝 عضویت در خبرنامه':
+        msg = bot.send_message(message.chat.id, "لطفاً شماره تماس خود را ارسال کنید (مثال: 09123456789):")
+        bot.register_next_step_handler(msg, save_number)
+    elif message.text == '📞 پشتیبانی':
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("واتساپ", url=WHATSAPP_LINK))
+        markup.add(types.InlineKeyboardButton("تلگرام", url=SUPPORT_TELEGRAM))
+        bot.send_message(message.chat.id, "برای پشتیبانی روی یکی از گزینه‌ها کلیک کنید:", reply_markup=markup)
 
-def send_categories(update: Update, context: CallbackContext):
-    response = requests.get(f"{WC_API_URL}/products/categories", auth=(CONSUMER_KEY, CONSUMER_SECRET))
-    categories = response.json()
-    keyboard = []
-    for cat in categories:
-        if cat['count'] > 0:
-            keyboard.append([InlineKeyboardButton(cat['name'], callback_data=f"cat_{cat['id']}")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text("دسته‌بندی‌ها:", reply_markup=reply_markup)
+# ------------------ ذخیره شماره ------------------
+def save_number(message):
+    with open("newsletter.txt", "a") as f:
+        f.write(f"{message.chat.id}: {message.text}
+")
+    bot.send_message(message.chat.id, "شماره شما ذخیره شد. از عضویت در خبرنامه سپاسگزاریم!")
 
-def category_selected(update: Update, context: CallbackContext):
-    query = update.callback_query
-    query.answer()
-    cat_id = query.data.split("_")[1]
-    response = requests.get(f"{WC_API_URL}/products", params={
-        "category": cat_id,
-        "stock_status": "instock",
-        "per_page": 10
-    }, auth=(CONSUMER_KEY, CONSUMER_SECRET))
-    products = response.json()
-
+# ------------------ کال‌بک دسته‌بندی ------------------
+@bot.callback_query_handler(func=lambda call: call.data.startswith("cat_"))
+def send_products(call):
+    cat_id = call.data.split("_")[1]
+    products = get_products_by_category(cat_id)
     if not products:
-        query.edit_message_text("متاسفانه محصولی در این دسته موجود نیست ❌")
+        bot.send_message(call.message.chat.id, "محصولی در این دسته موجود نیست.")
         return
+    for p in products:
+        name = p['name']
+        price = p['price']
+        image = p['images'][0]['src'] if p['images'] else ''
+        caption = f"*{name}*
+قیمت: {price} تومان
+برای سفارش، پیام دهید."
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("سفارش", url=f"https://t.me/{SUPPORT_TELEGRAM_USERNAME}"))
+        bot.send_photo(call.message.chat.id, image, caption=caption, parse_mode="Markdown", reply_markup=markup)
 
-    for product in products:
-        name = product['name']
-        price = product['price']
-        image_url = product['images'][0]['src'] if product['images'] else None
-
-        caption = f"*{name}*\nقیمت: {price} تومان\nبرای سفارش، پیام دهید."
-        keyboard = [[InlineKeyboardButton("📞 پشتیبانی", url=SUPPORT_LINK)]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        context.bot.send_photo(chat_id=query.message.chat.id, photo=image_url, caption=caption, parse_mode='Markdown', reply_markup=reply_markup)
-
-def main():
-    updater = Updater(BOT_TOKEN)
-    dp = updater.dispatcher
-
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CallbackQueryHandler(category_selected, pattern=r"^cat_"))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-
-    updater.start_polling()
-    updater.idle()
-
-if __name__ == '__main__':
-    main()
+bot.infinity_polling()
