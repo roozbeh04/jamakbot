@@ -62,9 +62,7 @@ def send_products(call):
         name = p['name']
         price = p['price']
         image = p['images'][0]['src'] if p['images'] else ''
-        caption = f"*{name}*
-قیمت: {price} تومان
-برای سفارش، پیام دهید."
+        caption = f"*{name}* قیمت: {price} تومان برای سفارش، پیام دهید."
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("سفارش", url=f"https://t.me/{SUPPORT_TELEGRAM_USERNAME}"))
         bot.send_photo(call.message.chat.id, image, caption=caption, parse_mode="Markdown", reply_markup=markup)
