@@ -23,8 +23,8 @@ def send_welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row('🛍 دسته‌بندی محصولات')
     markup.row('📝 عضویت در خبرنامه', '📞 پشتیبانی')
-    bot.send_message(message.chat.id, "به ژامک‌شاپ خوش آمدید ✨
-یکی از گزینه‌ها را انتخاب کنید:", reply_markup=markup)
+   bot.send_message(message.chat.id, """به ژامک‌شاپ خوش آمدید ✨
+لطفاً یک گزینه را انتخاب کنید:""" , reply_markup=markup)
 
 # ------------------ هندل پیام ------------------
 @bot.message_handler(func=lambda m: True)
