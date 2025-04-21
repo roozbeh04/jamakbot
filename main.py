@@ -1,5 +1,6 @@
 import telebot
 import requests
+from config import BOT_TOKEN, WC_URL, WC_KEY, WC_SECRET, SUPPORT_USERNAME, NEWSLETTER_EMAIL, SITE_URL, INSTAGRAM_URL
 from config import *
 from telebot import types
 
